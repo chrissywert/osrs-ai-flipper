@@ -11,8 +11,7 @@ st.title("⚔️ My OSRS Empire")
 # Locally, it will look for a file at .streamlit/secrets.toml
 # On the web, it uses the "Secrets" box in the dashboard
 try:
-client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-
+    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 except:
     st.error("API Key not found. Please check your Secrets settings!")
     st.stop()
