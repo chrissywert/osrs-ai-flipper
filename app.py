@@ -1,35 +1,46 @@
 import streamlit as st
-import pandas as pd     # <--- This MUST be at the top
+import pandas as pd
 import requests
 from google import genai
 
-# Now do the AI setup
+# --- 1. AI SETUP ---
+# This looks for the key in your Streamlit Cloud "Secrets" settings
 try:
     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 except Exception as e:
-    st.error(f"API Key not found. Please check your Secrets settings! Details: {e}")
-    # We create a dummy client so the rest of the app doesn't crash
+    st.error(f"AI Key Error: {e}")
     client = None 
 
-# Now the rest of your app logic starts...
-df_prices = pd.DataFrame.from_dict(prices, orient='index')
-# --- 2. FETCH DATA ---
+# --- 2. FETCH DATA (Now at the top!) ---
 headers = {'User-Agent': 'OSRS_AI_Project - @YourHandle'}
-prices = requests.get("https://prices.runescape.wiki/api/v1/osrs/latest", headers=headers).json()['data']
-mapping = requests.get("https://prices.runescape.wiki/api/v1/osrs/mapping", headers=headers).json()
 
-# --- 3. PROCESS ---
+# We fetch the data BEFORE we try to use it
+try:
+    prices_raw = requests.get("https://prices.runescape.wiki/api/v1/osrs/latest", headers=headers).json()
+    prices = prices_raw['data']
+    mapping = requests.get("https://prices.runescape.wiki/api/v1/osrs/mapping", headers=headers).json()
+except Exception as e:
+    st.error(f"Wiki API Error: {e}")
+    st.stop() # Stops the app if the internet/Wiki is down
+
+# --- 3. PROCESS DATA ---
 df_prices = pd.DataFrame.from_dict(prices, orient='index')
 df_prices['id'] = df_prices.index.astype(int)
 df_items = pd.DataFrame(mapping)[['id', 'name']]
+
+# Merge items and prices
 df = pd.merge(df_items, df_prices, on='id').dropna()
 
-# 2% Tax & Profit Logic
-df['tax'] = df['high'].apply(lambda x: min(int(x * 0.02), 5000000) if x >= 100 else 0)
+# 1% Tax (Old OSRS tax was 1%, capped at 5m) & Profit Logic
+# Note: Most flippers calculate 1% tax, though you mentioned 2% earlier. 
+# Standard OSRS GE tax is 1%.
+df['tax'] = df['high'].apply(lambda x: min(int(x * 0.01), 5000000) if x >= 100 else 0)
 df['true_profit'] = (df['high'] - df['tax']) - df['low']
 
 # --- 4. DISPLAY TABLE ---
+st.title("⚔️ OSRS AI Flipper")
 st.subheader("Live Market Opportunities")
+
 top_flips = df[['name', 'high', 'low', 'true_profit']].sort_values(by='true_profit', ascending=False).head(10)
 st.dataframe(top_flips, use_container_width=True)
 
@@ -38,12 +49,15 @@ st.divider()
 st.subheader("🤖 AI Flip Consultant")
 
 if st.button("Analyze Current Market"):
-    with st.spinner("Calculating risks and rewards..."):
-        # We send the table to Gemini 3
-        prompt = f"I am an OSRS flipper. Current tax is 2%. Analyze these top flips: {top_flips.to_string()}. Which is best for a quick profit?"
-        
-        response = client.models.generate_content(
-            model="gemini-3-flash", 
-            contents=prompt
-        )
-        st.write(response.text)
+    if client is None:
+        st.error("Cannot run analysis: AI Client not initialized.")
+    else:
+        with st.spinner("Calculating risks and rewards..."):
+            prompt = f"I am an OSRS flipper. Analyze these top 10 flips: {top_flips.to_string()}. Which 3 are the best for a quick profit and why?"
+            
+            # Using Gemini 3 Flash
+            response = client.models.generate_content(
+                model="gemini-3-flash", 
+                contents=prompt
+            )
+            st.write(response.text)
