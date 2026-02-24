@@ -1,21 +1,18 @@
 import streamlit as st
+import pandas as pd     # <--- This MUST be at the top
 import requests
-import pandas as pdBash
 from google import genai
 
-# --- 1. SETUP & SECRETS ---
-st.set_page_config(page_title="OSRS AI Flipper", layout="wide")
-st.title("⚔️ My OSRS Empire")
-
-# This pulls your key securely from Streamlit's settings
-# Locally, it will look for a file at .streamlit/secrets.toml
-# On the web, it uses the "Secrets" box in the dashboard
+# Now do the AI setup
 try:
     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-except:
-    st.error("API Key not found. Please check your Secrets settings!")
-    st.stop()
+except Exception as e:
+    st.error(f"API Key not found. Please check your Secrets settings! Details: {e}")
+    # We create a dummy client so the rest of the app doesn't crash
+    client = None 
 
+# Now the rest of your app logic starts...
+df_prices = pd.DataFrame.from_dict(prices, orient='index')
 # --- 2. FETCH DATA ---
 headers = {'User-Agent': 'OSRS_AI_Project - @YourHandle'}
 prices = requests.get("https://prices.runescape.wiki/api/v1/osrs/latest", headers=headers).json()['data']
